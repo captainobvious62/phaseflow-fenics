@@ -24,71 +24,6 @@ def verify_pci_position(Ste, R_s, w):
         if Ste == record['Ste']:
         
             assert(abs(pci_pos - record['true_pci_pos']) < R_s)
-  
-
-def refine_mesh_near_hot_boundary(mesh, hot_boundary_refinement_cycles):
-
-    if mesh.type().dim() is 1:
-    
-        mesh = refine_mesh_near_hot_boundary_1D(mesh, hot_boundary_refinement_cycles)
-        
-        return mesh
-        
-    else:
-    
-        class HotWall(fenics.SubDomain):
-        
-            def inside(self, x, on_boundary):
-            
-                return on_boundary and (fenics.near(x[0], 0.))
-
-                
-        hot_wall = HotWall()
-
-        for i in range(hot_boundary_refinement_cycles):
-
-            edge_markers = fenics.EdgeFunction("bool", mesh)
-            
-            hot_wall.mark(edge_markers, True)
-
-            fenics.adapt(mesh, edge_markers)
-            
-            mesh = mesh.child() 
-        
-        return mesh
-        
-        
-''' Refine mesh near hot boundary in 1D
-The usual approach of using SubDomain and EdgeFunction isn't appearing to work
-in 1D, so I'm going to just loop through the cells of the mesh and set markers manually.
-'''
-def refine_mesh_near_hot_boundary_1D(mesh, hot_boundary_refinement_cycles):
-
-    for i in range(hot_boundary_refinement_cycles):
-    
-        cell_markers = fenics.CellFunction("bool", mesh)
-        
-        cell_markers.set_all(False)
-        
-        for cell in fenics.cells(mesh):
-        
-            found_hot_boundary = False
-        
-            for vertex in fenics.vertices(cell):
-            
-                if fenics.near(vertex.x(0), 0., fenics.dolfin.DOLFIN_EPS):
-                
-                    found_hot_boundary = True
-                    
-            if found_hot_boundary:
-            
-                cell_markers[cell] = True
-
-                break # There should only be one such point.
-                
-        mesh = fenics.refine(mesh, cell_markers)
-
-    return mesh
     
     
 def stefan_problem(Ste = 1.,
@@ -97,7 +32,7 @@ def stefan_problem(Ste = 1.,
         a_s = 2.,
         R_s = 0.005,
         dt = 0.001,
-        final_time = 0.01,
+        final_time = 0.1,
         newton_relative_tolerance = 1.e-3,
         initial_uniform_cell_count = 1,
         hot_boundary_refinement_cycles = 10,
@@ -105,7 +40,7 @@ def stefan_problem(Ste = 1.,
 
     mesh = fenics.UnitIntervalMesh(initial_uniform_cell_count)
     
-    mesh = refine_mesh_near_hot_boundary(mesh, hot_boundary_refinement_cycles)
+    mesh = refine_mesh_near_boundary(mesh, fenics.near(x[0], 0.), hot_boundary_refinement_cycles)
 
     w = phaseflow.run(
         output_dir = 'output/test_stefan_problem_Ste'+str(Ste).replace('.', 'p')+'/',
@@ -132,13 +67,13 @@ def stefan_problem(Ste = 1.,
     return w
     
     
-def stefan_problem_2d(Ste = 1.,
+def stefan_problem_2d_symmetric(Ste = 1.,
         theta_h = 1.,
         theta_c = -1.,
         a_s = 2.,
         R_s = 0.005,
         dt = 0.001,
-        final_time = 0.01,
+        final_time = 0.1,
         newton_relative_tolerance = 1.e-3,
         initial_uniform_cell_count = 1,
         hot_boundary_refinement_cycles = 10,
@@ -146,10 +81,10 @@ def stefan_problem_2d(Ste = 1.,
 
     mesh = fenics.UnitSquareMesh(initial_uniform_cell_count, initial_uniform_cell_count, "crossed")
     
-    mesh = refine_mesh_near_hot_boundary(mesh, hot_boundary_refinement_cycles)
+    mesh = refine_mesh_near_boundary(mesh, fenics.near(x[0], 0.), hot_boundary_refinement_cycles)
 
     w = phaseflow.run(
-        output_dir = 'output/test_stefan_problem_2d_Ste'+str(Ste).replace('.', 'p')+'/',
+        output_dir = 'output/test_stefan_problem_2d_symmetric_Ste'+str(Ste).replace('.', 'p')+'/',
         Pr = 1.,
         Ste = Ste,
         g = [0., 0.],
@@ -160,6 +95,48 @@ def stefan_problem_2d(Ste = 1.,
             "0.",
             "0.",
             "("+str(theta_h)+" - "+str(theta_c)+")*near(x[0],  0.) "+str(theta_c)),
+        boundary_conditions = [
+            {'subspace': 0, 'value_expression': [0., 0.], 'degree': 3, 'location_expression': "near(x[0],  0.) | near(x[0],  1.)", 'method': "topological"},
+            {'subspace': 2, 'value_expression': theta_h, 'degree': 2, 'location_expression': "near(x[0],  0.)", 'method': "topological"},
+            {'subspace': 2, 'value_expression': theta_c, 'degree': 2, 'location_expression': "near(x[0],  1.)", 'method': "topological"}],
+        regularization = {'a_s': 2., 'theta_s': 0.01, 'R_s': R_s},
+        newton_relative_tolerance = newton_relative_tolerance,
+        final_time = final_time,
+        time_step_bounds = dt,
+        linearize = False)
+        
+    return w
+        
+        
+''' @todo: I've been setting the 2D boundary conditions wrong.'''        
+def stefan_problem_2d_asymmetric(Ste = 1.,
+        theta_h = 1.,
+        theta_c = -1.,
+        a_s = 2.,
+        R_s = 0.005,
+        dt = 0.001,
+        final_time = 0.1,
+        newton_relative_tolerance = 1.e-3,
+        initial_uniform_cell_count = 1,
+        hot_boundary_refinement_cycles = 10,
+        max_pci_refinement_cycles = 10):
+
+    mesh = fenics.UnitSquareMesh(initial_uniform_cell_count, initial_uniform_cell_count, "crossed")
+    
+    mesh = refine_mesh_near_boundary(mesh, (fenics.near(x[0], 0.) or fenics.near(x[1], 0.), hot_boundary_refinement_cycles)
+
+    w = phaseflow.run(
+        output_dir = 'output/test_stefan_problem_2d_asymmetric_Ste'+str(Ste).replace('.', 'p')+'/',
+        Pr = 1.,
+        Ste = Ste,
+        g = [0., 0.],
+        mesh = mesh,
+        max_pci_refinement_cycles = max_pci_refinement_cycles,
+        initial_values_expression = (
+            "0.",
+            "0.",
+            "0.",
+            "("+str(theta_h)+" - "+str(theta_c)+")*(near(x[0],  0.) | near(x[1], 0.)) + "+str(theta_c)),
         boundary_conditions = [
             {'subspace': 0, 'value_expression': [0., 0.], 'degree': 3, 'location_expression': "near(x[0],  0.) | near(x[0],  1.)", 'method': "topological"},
             {'subspace': 2, 'value_expression': theta_h, 'degree': 2, 'location_expression': "near(x[0],  0.)", 'method': "topological"},
@@ -192,15 +169,24 @@ def test_stefan_problem_vary_Ste():
         
 def test_stefan_problem_2d_symmetric():
 
-    for p in [{'Ste': 0.1, 'R_s': 0.05, 'dt': 0.0001, 'final_time': 0.01,
-               'initial_uniform_cell_count': 10, 'newton_relative_tolerance': 1.e-4}]:
+    for p in [{'Ste': 1., 'R_s': 0.005, 'dt': 0.001, 'final_time': 0.1,
+               'initial_uniform_cell_count': 1, 'newton_relative_tolerance': 1.e-3}]:
         
-        w = stefan_problem_2d(Ste=p['Ste'], R_s=p['R_s'], dt=p['dt'], final_time = p['final_time'],
+        w = stefan_problem_2d_symmetric(Ste=p['Ste'], R_s=p['R_s'], dt=p['dt'], final_time = p['final_time'],
             initial_uniform_cell_count=p['initial_uniform_cell_count'], newton_relative_tolerance=p['newton_relative_tolerance'])
     
         verify_pci_position(p['Ste'], p['R_s'], w)
-       
-       
+
+        
+def test_stefan_problem_2d_asymmetric():
+
+    for p in [{'Ste': 0.1, 'R_s': 0.05, 'dt': 0.0001, 'final_time': 0.01,
+               'initial_uniform_cell_count': 10, 'newton_relative_tolerance': 1.e-4}]:
+        
+        w = stefan_problem_2d_asymmetric(Ste=p['Ste'], R_s=p['R_s'], dt=p['dt'], final_time = p['final_time'],
+            initial_uniform_cell_count=p['initial_uniform_cell_count'], newton_relative_tolerance=p['newton_relative_tolerance'])     
+
+        
 def test_stefan_problem_linearized():
 
     theta_h = 1.
@@ -376,3 +362,5 @@ if __name__=='__main__':
     test_stefan_problem_pci_refinement()
     
     test_stefan_problem_2D_symmetric()
+    
+    test_stefan_problem_2D_asymmetric()
