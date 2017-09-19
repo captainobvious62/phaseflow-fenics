@@ -66,7 +66,7 @@ def variable_viscosity(m=20, start_time = 0., end_time = 1000., time_step_bounds
         g = (0., 0.),
         Ste = 1.e16,
         output_dir = output_dir,
-        initial_values_expression = (lid, "0.", "0.", "1. - 2.*(x[1] <= 0.)"),
+        initial_values_expression = (lid, "0.", "0.", "1. - 2.*(x[1] <= 0.)", "0."),
         boundary_conditions = [
             {'subspace': 0, 'value_expression': ("1.", "0."), 'degree': 3, 'location_expression': lid, 'method': 'topological'},
             {'subspace': 0, 'value_expression': ("0.", "0."), 'degree': 3, 'location_expression': fixed_walls, 'method': 'topological'},

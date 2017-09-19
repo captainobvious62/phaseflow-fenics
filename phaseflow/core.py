@@ -12,20 +12,13 @@ import refine
 import output
 
 
-'''@todo First add variable viscosity, later latent heat source term.
-Conceptually this will be like having a PCM with zero latent heat.
-The melting front should move quickly.'''
-
-def function_spaces(mesh=default.mesh, pressure_degree=default.pressure_degree, temperature_degree=default.temperature_degree):
+def function_spaces(mesh=default.mesh,
+        pressure_degree=default.pressure_degree, 
+        temperature_degree=default.temperature_degree,
+        concentration_degree=default.concentration_degree):
     """ Define function spaces for the variational form."""
     
     velocity_degree = pressure_degree + 1
-    
-    velocity_space = fenics.VectorFunctionSpace(mesh, 'P', velocity_degree)
-
-    pressure_space = fenics.FunctionSpace(mesh, 'P', pressure_degree) # @todo mixing up test function space
-
-    temperature_space = fenics.FunctionSpace(mesh, 'P', temperature_degree)
 
     ''' MixedFunctionSpace used to be available but is now deprecated. 
     The way that fenics separates function spaces and elements is confusing.
@@ -33,21 +26,14 @@ def function_spaces(mesh=default.mesh, pressure_degree=default.pressure_degree, 
     '''
     velocity_element = fenics.VectorElement('P', mesh.ufl_cell(), velocity_degree)
 
-    '''
-    @todo How can we use the space
-        $Q = \left{q \in L^2(\Omega) | \int{q = 0}\right}$ ?
-
-    All Navier-Stokes FEniCS examples I've found simply use P2P1. danaila2014newton says that
-    they are using the "classical Hilbert spaces" for velocity and pressure, but then they write down the space Q with less restrictions than H^1_0.
-    
-    My understanding is that the space Q relates to the divergence-free
-    requirement.
-    '''
     pressure_element = fenics.FiniteElement('P', mesh.ufl_cell(), pressure_degree)
 
     temperature_element = fenics.FiniteElement('P', mesh.ufl_cell(), temperature_degree)
+    
+    concentration_element = fenics.FiniteElement('P', mesh.ufl_cell(), concentration_degree)
 
-    solution_element = fenics.MixedElement([velocity_element, pressure_element, temperature_element])
+    solution_element = fenics.MixedElement([velocity_element, pressure_element,
+        temperature_element, concentration_element])
 
     solution_function_space = fenics.FunctionSpace(mesh, solution_element)  
     
@@ -61,6 +47,8 @@ def run(
     Ste = default.parameters['Ste'],
     C = default.parameters['C'],
     K = default.parameters['K'],
+    Sc = default.parameters['Sc'],
+    D = default.parameters['D'],
     mu_l = default.parameters['mu_l'],
     mu_s = default.parameters['mu_s'],
     g = default.parameters['g'],
@@ -68,7 +56,8 @@ def run(
     ddtheta_m_B = default.ddtheta_m_B,
     regularization = default.regularization,
     mesh=default.mesh,
-    initial_values_expression = ("0.", "0.", "0.", "0.5*near(x[0],  0.) -0.5*near(x[0],  1.)"),
+    initial_values_expression = ("0.", "0.", "0.",
+        "0.5*near(x[0],  0.) -0.5*near(x[0],  1.)", "0."),
     boundary_conditions = [{'subspace': 0,
             'value_expression': ("0.", "0."), 'degree': 3,
             'location_expression': "near(x[0],  0.) | near(x[0],  1.) | near(x[1], 0.) | near(x[1],  1.)", 'method': 'topological'},
@@ -95,6 +84,7 @@ def run(
     nlp_relaxation_bounds = (0.3, 1., 1.),
     pressure_degree = default.pressure_degree,
     temperature_degree = default.temperature_degree,
+    concentration_degree = default.concentration_degree,
     automatic_jacobian = False,
     stop_when_steady = True,
     steady_relative_tolerance = 1.e-4,
@@ -217,7 +207,8 @@ def run(
             
             
                 # Define function spaces and solution function 
-                W, W_ele = function_spaces(mesh, pressure_degree, temperature_degree)
+                W, W_ele = function_spaces(mesh, pressure_degree, temperature_degree,
+                    concentration_degree)
 
                 w = fenics.Function(W)
                 
@@ -235,7 +226,8 @@ def run(
                             
                                 h5.read(mesh, 'mesh', True)
                             
-                            W, W_ele = function_spaces(mesh, pressure_degree, temperature_degree)
+                            W, W_ele = function_spaces(mesh, pressure_degree,
+                                temperature_degree, concentration_degree)
                         
                             w_n = fenics.Function(W)
                         
@@ -280,7 +272,15 @@ def run(
                 time_step_size, end_time, output_times, output_count)
                 
                 # Initialize the functions that we will use to generate our variational form
-                form_factory = form.FormFactory(W, {'Ra': Ra, 'Pr': Pr, 'Ste': Ste, 'C': C, 'K': K, 'g': g, 'gamma': gamma, 'mu_l': mu_l, 'mu_s': mu_s}, m_B, ddtheta_m_B, regularization)
+                form_factory = form.FormFactory(W,
+                    {'Ra': Ra, 'Pr': Pr,
+                        'Ste': Ste, 'C': C, 'K': K,
+                        'Sc': Sc, 'D': D,
+                        'g': g,
+                        'gamma': gamma,
+                        'mu_l': mu_l, 'mu_s': mu_s},
+                    m_B, ddtheta_m_B,
+                    regularization)
 
                 
                 # Make the time step solver

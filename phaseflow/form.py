@@ -90,6 +90,12 @@ class FormFactory():
         """Thermal diffusivity"""
         K = fenics.Constant(self.parameters['K'])
         
+        """Schmidt Number"""
+        Sc = fenics.Constant(self.parameters['Sc'])
+        
+        """Mass diffusivity"""
+        D = fenics.Constant(self.parameters['D'])
+        
         """Gravity"""
         g = fenics.Constant(self.parameters['g'])
         
@@ -132,17 +138,23 @@ class FormFactory():
         
         S = lambda theta : heaviside_tanh(theta, f_s=S_s, f_l=S_l)
 
+        """Phase field"""
+        P_s = 0.
+        
+        P_l = 1.
+        
+        P = lambda theta : heaviside_tanh(theta, f_s=P_s, f_l=P_l)
         
         """Set the nonlinear variational form."""
-        u_n, p_n, theta_n = fenics.split(w_n)
+        u_n, p_n, theta_n, xi_n = fenics.split(w_n)
 
         w_w = fenics.TrialFunction(self.W)
         
-        u_w, p_w, theta_w = fenics.split(w_w)
+        u_w, p_w, theta_w, xi_w = fenics.split(w_w)
         
-        v, q, phi = fenics.TestFunctions(self.W)
+        v, q, phi, chi = fenics.TestFunctions(self.W)
         
-        u_k, p_k, theta_k = fenics.split(w_k)
+        u_k, p_k, theta_k, xi_k = fenics.split(w_k)
 
         F = (
             b(u_k, q) - gamma*p_k*q
@@ -152,6 +164,9 @@ class FormFactory():
             + 1./dt*C*(theta_k - theta_n)*phi
             - dot(C*theta_k*u_k, grad(phi)) + 1./Pr*dot(K*grad(theta_k), grad(phi))
             + 1./dt*C*(S(theta_k) - S(theta_n))*phi
+            + 1./dt*P(theta_k)*(xi_k - xi_n)*chi
+            - dot(xi_k*u_k, grad(chi)) + 1./Sc*dot(D*grad(xi_k), grad(chi))
+            + 1./dt*xi_k*(P(theta_k) - P(theta_n))*chi
             )*fenics.dx
 
         if automatic_jacobian:
@@ -160,13 +175,15 @@ class FormFactory():
             
         else:
         
-            ddtheta_m_B = self.ddtheta_m_B
+            dmB = self.ddtheta_m_B
             
-            ddtheta_f_B = lambda theta : ddtheta_m_B(theta)*g
+            dfB = lambda theta : dmB(theta)*g
             
             ddtheta_heaviside_tanh = lambda theta, f_s, f_l: -(a_s*(fenics.tanh((a_s*(theta_s - theta))/R_s)**2 - 1.)*(f_l/2. - f_s/2.))/R_s
             
             dS = lambda theta : ddtheta_heaviside_tanh(theta, f_s=S_s, f_l=S_l)
+            
+            dP = lambda theta : ddtheta_heaviside_tanh(theta, f_s=P_s, f_l=P_l)
         
             dmu = lambda theta : ddtheta_heaviside_tanh(theta, f_s=mu_s, f_l=mu_l)        
 
@@ -176,12 +193,16 @@ class FormFactory():
                 + 1./dt*dot(u_w, v)
                 + c(u_k, u_w, v) + c(u_w, u_k, v) + b(v, p_w)
                 + a(theta_w*dmu(theta_k), u_k, v) + a(mu(theta_k), u_w, v) 
-                + dot(theta_w*ddtheta_f_B(theta_k), v)
+                + dot(theta_w*dfB(theta_k), v)
                 + 1./dt*C*theta_w*phi
                 - dot(C*theta_k*u_w, grad(phi))
                 - dot(C*theta_w*u_k, grad(phi))
                 + 1./Pr*dot(K*grad(theta_w), grad(phi))
                 + 1./dt*C*theta_w*dS(theta_k)*phi
+                + 1./dt*(theta_w*dP(theta_k)*(xi_k - xi_n) + P(theta_k)*xi_w)*chi
+                - dot(xi_k*u_w, grad(chi)) - dot(xi_w*u_k, grad(chi))
+                + 1./Sc*dot(D*grad(xi_w), grad(chi))
+                + 1./dt*(xi_w*(P(theta_k) - P(theta_n)) + xi_k*theta_w*dP(theta_k))*chi
                 )*fenics.dx
 
         return F, JF

@@ -41,7 +41,7 @@ def ghia1982_steady_lid_driven_cavity(automatic_jacobian=True):
         g = (0., 0.),
         Ste = 1.e16,
         output_dir='output/test_ghia1982_steady_lid_driven_cavity',
-        initial_values_expression = (lid, "0.", "0.", "1."),
+        initial_values_expression = (lid, "0.", "0.", "1.", "0."),
         boundary_conditions = [
             {'subspace': 0, 'value_expression': ("1.", "0."), 'degree': 3, 'location_expression': lid, 'method': 'topological'},
             {'subspace': 0, 'value_expression': ("0.", "0."), 'degree': 3, 'location_expression': fixed_walls, 'method': 'topological'},

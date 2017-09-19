@@ -18,7 +18,8 @@ def test_1d_output():
         initial_values_expression = (
             "0.",
             "0.",
-            "("+str(theta_h)+" - "+str(theta_c)+")*near(x[0],  0.) "+str(theta_c)),
+            "("+str(theta_h)+" - "+str(theta_c)+")*near(x[0],  0.) "+str(theta_c),
+            "0."),
         boundary_conditions = [
             {'subspace': 0, 'value_expression': [0.], 'degree': 3, 'location_expression': "near(x[0],  0.) | near(x[0],  1.)", 'method': "topological"},
             {'subspace': 2, 'value_expression': theta_h, 'degree': 2, 'location_expression': "near(x[0],  0.)", 'method': "topological"},
