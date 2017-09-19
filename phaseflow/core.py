@@ -49,8 +49,9 @@ def run(
     K = default.parameters['K'],
     Sc = default.parameters['Sc'],
     D = default.parameters['D'],
-    mu_l = default.parameters['mu_l'],
+    R_factor = default.parameters['R_factor'],
     mu_s = default.parameters['mu_s'],
+    mu_l = default.parameters['mu_l'],
     g = default.parameters['g'],
     m_B = default.m_B,
     ddtheta_m_B = default.ddtheta_m_B,
@@ -276,9 +277,10 @@ def run(
                     {'Ra': Ra, 'Pr': Pr,
                         'Ste': Ste, 'C': C, 'K': K,
                         'Sc': Sc, 'D': D,
+                        'R_factor': R_factor,
                         'g': g,
                         'gamma': gamma,
-                        'mu_l': mu_l, 'mu_s': mu_s},
+                        'mu_s': mu_s, 'mu_l': mu_l},
                     m_B, ddtheta_m_B,
                     regularization)
 

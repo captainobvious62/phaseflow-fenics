@@ -96,6 +96,9 @@ class FormFactory():
         """Mass diffusivity"""
         D = fenics.Constant(self.parameters['D'])
         
+        """Scale the concentration reaction term"""
+        R_factor = fenics.Constant(self.parameters['R_factor'])
+        
         """Gravity"""
         g = fenics.Constant(self.parameters['g'])
         
@@ -139,9 +142,9 @@ class FormFactory():
         S = lambda theta : heaviside_tanh(theta, f_s=S_s, f_l=S_l)
 
         """Phase field"""
-        P_s = 0.
+        P_s = fenics.Constant(0.)
         
-        P_l = 1.
+        P_l = fenics.Constant(1.)
         
         P = lambda theta : heaviside_tanh(theta, f_s=P_s, f_l=P_l)
         
@@ -164,9 +167,9 @@ class FormFactory():
             + 1./dt*C*(theta_k - theta_n)*phi
             - dot(C*theta_k*u_k, grad(phi)) + 1./Pr*dot(K*grad(theta_k), grad(phi))
             + 1./dt*C*(S(theta_k) - S(theta_n))*phi
-            + 1./dt*P(theta_k)*(xi_k - xi_n)*chi
+            + 1./dt*1./R_factor*P(theta_k)*(xi_k - xi_n)*chi
             - dot(xi_k*u_k, grad(chi)) + 1./Sc*dot(D*grad(xi_k), grad(chi))
-            + 1./dt*xi_k*(P(theta_k) - P(theta_n))*chi
+            + 1./dt*xi_k*1./R_factor*(P(theta_k) - P(theta_n))*chi
             )*fenics.dx
 
         if automatic_jacobian:
@@ -199,10 +202,10 @@ class FormFactory():
                 - dot(C*theta_w*u_k, grad(phi))
                 + 1./Pr*dot(K*grad(theta_w), grad(phi))
                 + 1./dt*C*theta_w*dS(theta_k)*phi
-                + 1./dt*(theta_w*dP(theta_k)*(xi_k - xi_n) + P(theta_k)*xi_w)*chi
+                + 1./dt*1./R_factor*(theta_w*dP(theta_k)*(xi_k - xi_n) + P(theta_k)*xi_w)*chi
                 - dot(xi_k*u_w, grad(chi)) - dot(xi_w*u_k, grad(chi))
                 + 1./Sc*dot(D*grad(xi_w), grad(chi))
-                + 1./dt*(xi_w*(P(theta_k) - P(theta_n)) + xi_k*theta_w*dP(theta_k))*chi
+                + 1./dt*1./R_factor*(xi_w*(P(theta_k) - P(theta_n)) + xi_k*theta_w*dP(theta_k))*chi
                 )*fenics.dx
 
         return F, JF
