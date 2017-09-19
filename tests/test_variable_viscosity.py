@@ -21,9 +21,11 @@ def verify_against_ghia1982(w, mesh):
             assert(abs(ux - true_ux) < 2.e-2)
             
 
-def variable_viscosity(m=20, start_time = 0., end_time = 1000., time_step_bounds = (0.1, 0.1, 10.),
-    output_times = ('start', 1., 10., 100., 'end'), mu_s = 1.e6,
-    initial_pci_refinement_cycles = 4, theta_s = 0., R_s = 0.05, restart = False):
+def variable_viscosity(m=20, start_time = 0., end_time = 1000.,
+        time_step_bounds = (0.1, 0.1, 10.),
+        output_times = ('start', 1., 10., 100., 'end'),
+        mu_s = 1.e6,
+        initial_pci_refinement_cycles = 4, theta_s = 0., R_s = 0.05, restart = False):
 
     lid = 'near(x[1],  1.)'
 
@@ -34,21 +36,11 @@ def variable_viscosity(m=20, start_time = 0., end_time = 1000., time_step_bounds
     left_middle = 'near(x[0], 0.) && near(x[1], 0.5)'
     
     output_dir = 'output/variable_viscosity_m'+str(m)+'_mus'+str(mu_s)+'_thetas'+str(theta_s)+'_Rs'+str(R_s)
-    
-    restart_filepath=''
-    
-    if restart:
-    
-        restart_filepath = output_dir+'/restart_t'+str(start_time)+'.hdf5'
-        
-        output_dir = output_dir+'_restart'+str(start_time)
         
     w, mesh = phaseflow.run(
         debug = True,
-        restart = restart,
-        restart_filepath = restart_filepath,
-        automatic_jacobian = False,
-        mesh = fenics.RectangleMesh(fenics.Point(0., ymin), fenics.Point(1., 1.), m, m, 'crossed'),
+        mesh = fenics.RectangleMesh(fenics.Point(0., ymin), fenics.Point(1., 1.),
+            m, m, 'crossed'),
         start_time = start_time,
         end_time = end_time,
         time_step_bounds = time_step_bounds,
