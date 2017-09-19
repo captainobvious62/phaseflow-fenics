@@ -146,12 +146,12 @@ class FormFactory():
 
         F = (
             b(u_k, q) - gamma*p_k*q
-            + dot(u_k - u_n, v)/dt
+            + 1./dt*dot(u_k - u_n, v)
             + c(u_k, u_k, v) + b(v, p_k) + a(mu(theta_k), u_k, v)
             + dot(f_B(theta_k), v)
-            + C/dt*(theta_k - theta_n)*phi
-            - dot(C*theta_k*u_k, grad(phi)) + K/Pr*dot(grad(theta_k), grad(phi))
-            + C/dt*(S(theta_k) - S(theta_n))*phi
+            + 1./dt*C*(theta_k - theta_n)*phi
+            - dot(C*theta_k*u_k, grad(phi)) + 1./Pr*dot(K*grad(theta_k), grad(phi))
+            + 1./dt*C*(S(theta_k) - S(theta_n))*phi
             )*fenics.dx
 
         if automatic_jacobian:
@@ -173,15 +173,15 @@ class FormFactory():
             """Set the Jacobian (formally the Gateaux derivative)."""
             JF = (
                 b(u_w, q) - gamma*p_w*q 
-                + dot(u_w, v)/dt
+                + 1./dt*dot(u_w, v)
                 + c(u_k, u_w, v) + c(u_w, u_k, v) + b(v, p_w)
                 + a(theta_w*dmu(theta_k), u_k, v) + a(mu(theta_k), u_w, v) 
                 + dot(theta_w*ddtheta_f_B(theta_k), v)
-                + C/dt*theta_w*phi
+                + 1./dt*C*theta_w*phi
                 - dot(C*theta_k*u_w, grad(phi))
                 - dot(C*theta_w*u_k, grad(phi))
-                + K/Pr*dot(grad(theta_w), grad(phi))
-                + C/dt*theta_w*dS(theta_k)*phi
+                + 1./Pr*dot(K*grad(theta_w), grad(phi))
+                + 1./dt*C*theta_w*dS(theta_k)*phi
                 )*fenics.dx
 
         return F, JF
