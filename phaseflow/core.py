@@ -12,20 +12,10 @@ import refine
 import output
 
 
-'''@todo First add variable viscosity, later latent heat source term.
-Conceptually this will be like having a PCM with zero latent heat.
-The melting front should move quickly.'''
-
 def function_spaces(mesh=default.mesh, pressure_degree=default.pressure_degree, temperature_degree=default.temperature_degree):
     """ Define function spaces for the variational form."""
     
     velocity_degree = pressure_degree + 1
-    
-    velocity_space = fenics.VectorFunctionSpace(mesh, 'P', velocity_degree)
-
-    pressure_space = fenics.FunctionSpace(mesh, 'P', pressure_degree) # @todo mixing up test function space
-
-    temperature_space = fenics.FunctionSpace(mesh, 'P', temperature_degree)
 
     ''' MixedFunctionSpace used to be available but is now deprecated. 
     The way that fenics separates function spaces and elements is confusing.
@@ -33,16 +23,6 @@ def function_spaces(mesh=default.mesh, pressure_degree=default.pressure_degree, 
     '''
     velocity_element = fenics.VectorElement('P', mesh.ufl_cell(), velocity_degree)
 
-    '''
-    @todo How can we use the space
-        $Q = \left{q \in L^2(\Omega) | \int{q = 0}\right}$ ?
-
-    All Navier-Stokes FEniCS examples I've found simply use P2P1. danaila2014newton says that
-    they are using the "classical Hilbert spaces" for velocity and pressure, but then they write down the space Q with less restrictions than H^1_0.
-    
-    My understanding is that the space Q relates to the divergence-free
-    requirement.
-    '''
     pressure_element = fenics.FiniteElement('P', mesh.ufl_cell(), pressure_degree)
 
     temperature_element = fenics.FiniteElement('P', mesh.ufl_cell(), temperature_degree)
@@ -69,15 +49,13 @@ def run(
     regularization = default.regularization,
     mesh=default.mesh,
     initial_values_expression = ("0.", "0.", "0.", "0.5*near(x[0],  0.) -0.5*near(x[0],  1.)"),
-    boundary_conditions = [{'subspace': 0,
-            'value_expression': ("0.", "0."), 'degree': 3,
-            'location_expression': "near(x[0],  0.) | near(x[0],  1.) | near(x[1], 0.) | near(x[1],  1.)", 'method': 'topological'},
-        {'subspace': 2,
-            'value_expression': "0.5", 'degree': 2, 
-            'location_expression': "near(x[0],  0.)", 'method': 'topological'},
-         {'subspace': 2,
-            'value_expression': "-0.5", 'degree': 2, 
-            'location_expression': "near(x[0],  1.)", 'method': 'topological'}],
+    boundary_conditions = [
+        {'subspace': 0, 'value_expression': ("0.", "0."), 'degree': 3,
+        'location_expression': "near(x[0],  0.) | near(x[0],  1.) | near(x[1], 0.) | near(x[1],  1.)", 'method': 'topological'},
+        {'subspace': 2, 'value_expression': "0.5", 'degree': 2, 
+        'location_expression': "near(x[0],  0.)", 'method': 'topological'},
+        {'subspace': 2, 'value_expression': "-0.5", 'degree': 2, 
+        'location_expression': "near(x[0],  1.)", 'method': 'topological'}],
     start_time = 0.,
     end_time = 10.,
     time_step_size = 1.e-3,
@@ -351,13 +329,17 @@ def run(
             
                 helpers.print_once("Start time is already too close to end time. Only writing initial values.")
                 
-                fe_field_interpolant = fenics.interpolate(w_n.leaf_node(), W)
+                fe_field_interpolant = fenics.interpolate(w_n.leaf_node(), W.leaf_node())
                 
                 return fe_field_interpolant, mesh
             
             solver.solve(adaptive_solver_tolerance)
             
             current_time += time_step_size
+            
+            if it == 0:
+            
+                w_n = fenics.interpolate(w_n, W.leaf_node())
             
             if stop_when_steady and time.steady(W, w_k, w_n, 
                     steady_relative_tolerance):
