@@ -10,14 +10,11 @@ temperature_degree = 1
 
 Re = 1.
 
-mu = 1.
-
 C = 1.
 
 K = 1.
 
 gamma = 1.e-7
-
 
 def make_mixed_fe(mesh):
     """ Define mixed FE function space for the variational form."""
@@ -58,8 +55,10 @@ def write_solution(solution_file, w, time):
         solution_file.write(var, time)
 
         
-def forms(W, w_k, w_n, dt, rayleigh_number, prandtl_number, gravity):
+def forms(W, w_k, w_n, dt, viscosity, rayleigh_number, prandtl_number, gravity):
     """ Define the variational forms. """
+    mu = fenics.Constant(viscosity)
+    
     Ra = fenics.Constant(rayleigh_number)
     
     Pr = fenics.Constant(prandtl_number)
@@ -123,7 +122,7 @@ def forms(W, w_k, w_n, dt, rayleigh_number, prandtl_number, gravity):
     return F, JF, M
 
 
-def adaptive_natural_convection_in_differentially_heated_cavity():
+def test_adaptive_natural_convection_in_differentially_heated_cavity():
     
     m = 20
     
@@ -155,8 +154,8 @@ def adaptive_natural_convection_in_differentially_heated_cavity():
     
     dt = fenics.Constant(time_step_size)
     
-    F, JF, M = forms(W=W, w_k=w_k, w_n=w_n, dt=dt, rayleigh_number=1.e6, prandtl_number=0.71,
-        gravity = (0., -1.))
+    F, JF, M = forms(W=W, w_k=w_k, w_n=w_n, dt=dt, viscosity=1.,
+        rayleigh_number=1.e6, prandtl_number=0.71, gravity = (0., -1.))
     
     problem = fenics.NonlinearVariationalProblem(F, w_k, bcs, JF)
     
@@ -172,7 +171,7 @@ def adaptive_natural_convection_in_differentially_heated_cavity():
 
     fenics.set_log_level(fenics.PROGRESS)
         
-    with fenics.XDMFFile('output/solution.xdmf') as solution_file:
+    with fenics.XDMFFile('output/natural_convection/solution.xdmf') as solution_file:
     
         # Write the initial values
         write_solution(solution_file, w_n, time)
@@ -198,7 +197,78 @@ def adaptive_natural_convection_in_differentially_heated_cavity():
             w_n.leaf_node().vector()[:] = w_k.leaf_node().vector()  
     
     
+def lid_driven_cavity(adaptive):
+
+    lid = 'near(x[1],  1.)'
+
+    fixed_walls = 'near(x[0],  0.) | near(x[0],  1.) | near(x[1],  0.)'
+
+    bottom_left_corner = 'near(x[0], 0.) && near(x[1], 0.)'
+    
+    m = 10
+    
+    mesh = fenics.UnitSquareMesh(m, m, 'crossed')
+    
+    W, W_ele = make_mixed_fe(mesh)
+    
+    w_k = fenics.Function(W)
+    
+    
+    # Set initial values.
+    w_n = fenics.Expression((lid, "0.", "0.", "0."), element=W_ele)
+    
+    
+    # Set boundary conditions
+    bcs = [
+        fenics.DirichletBC(W.sub(0), ("1.", "0."), lid,  method='topological'),
+        fenics.DirichletBC(W.sub(0), ("0.", "0."), fixed_walls, method='topological'),
+        fenics.DirichletBC(W.sub(1), "0.", bottom_left_corner, method='pointwise')]
+        
+        
+    # Make the problem.
+    time_step_size = 1.e12  # Reach steady state in a single step.
+    
+    dt = fenics.Constant(time_step_size)
+    
+    F, JF, M = forms(W=W, w_k=w_k, w_n=w_n, dt=dt, viscosity=0.01,
+        rayleigh_number=1., prandtl_number=1., gravity = (0., 0.))
+    
+    problem = fenics.NonlinearVariationalProblem(F, w_k, bcs, JF)
+    
+    
+    # Solve the problem.
+    if adaptive:
+    
+        solver = fenics.AdaptiveNonlinearVariationalSolver(problem, M)
+        
+        solver.solve(1.e-4)
+        
+    else:
+    
+        solver = fenics.NonlinearVariationalSolver(problem)
+        
+        solver.solve()
+        
+    with fenics.XDMFFile('output/lid_driven_cavity/solution.xdmf') as solution_file:
+    
+        write_solution(solution_file=solution_file, w=w_k, time=time_step_size)
+    
+    
+def test_lid_driven_cavity():
+
+    lid_driven_cavity(adaptive=False)
+    
+    
+def test_adaptive_lid_driven_cavity():
+
+    lid_driven_cavity(adaptive=True)
+    
+    
 if __name__=='__main__':
     
-    adaptive_natural_convection_in_differentially_heated_cavity()
+    test_adaptive_natural_convection_in_differentially_heated_cavity()
+    
+    test_lid_driven_cavity()
+    
+    test_adaptive_lid_driven_cavity()
     
