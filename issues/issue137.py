@@ -14,7 +14,13 @@ C = 1.
 
 K = 1.
 
+Ste = 1.
+
+solid_viscosity=1.e4
+
 gamma = 1.e-7
+
+r = 0.05
 
 def make_mixed_fe(mesh):
     """ Define mixed FE function space for the variational form."""
@@ -55,9 +61,11 @@ def write_solution(solution_file, w, time):
         solution_file.write(var, time)
 
         
-def forms(W, w_k, w_n, dt, viscosity, rayleigh_number, prandtl_number, gravity):
+def forms(W, w_k, w_n, dt, liquid_viscosity, rayleigh_number, prandtl_number, gravity, T_f):
     """ Define the variational forms. """
-    mu = fenics.Constant(viscosity)
+    mu_l = fenics.Constant(liquid_viscosity)
+    
+    mu_s = fenics.Constant(solid_viscosity)
     
     Ra = fenics.Constant(rayleigh_number)
     
@@ -77,6 +85,12 @@ def forms(W, w_k, w_n, dt, viscosity, rayleigh_number, prandtl_number, gravity):
     
     f_B = lambda T : g*T*Ra/(Pr*Re**2)
     
+    L = C/Ste
+    
+    P = lambda T: 0.5*(1. - fenics.tanh(2.*(T_f - T)/r))
+    
+    mu = lambda (T) : mu_s + (mu_l - mu_s)*P(T)
+    
     u_n, p_n, T_n = fenics.split(w_n)
 
     w_w = fenics.TrialFunction(W)
@@ -90,32 +104,40 @@ def forms(W, w_k, w_n, dt, viscosity, rayleigh_number, prandtl_number, gravity):
     F = (
         b(u_k, q) - gamma*p_k*q
         + dot(u_k - u_n, v)/dt
-        + c(u_k, u_k, v) + b(v, p_k) + a(mu, u_k, v)
+        + c(u_k, u_k, v) + b(v, p_k) + a(mu(T_k), u_k, v)
         + dot(f_B(T_k), v)
         + C/dt*(T_k - T_n)*phi
         - dot(C*T_k*u_k, grad(phi)) 
         + K/Pr*dot(grad(T_k), grad(phi))
+        + 1./dt*L*(P(T_k) - P(T_n))*phi
         )*fenics.dx
     
     
     # Set the Gateaux derivative.
-    ddT_f_B = lambda T : g*Ra/(Pr*Re**2)
+    df_B = lambda T : g*Ra/(Pr*Re**2)
 
+    sech = lambda theta: 1./fenics.cosh(theta)
+    
+    dP = lambda T: sech(2.*(T_f - T)/r)**2/r
+
+    dmu = lambda T : (mu_l - mu_s)*dP(T)
+    
     JF = (
         b(u_w, q) - gamma*p_w*q 
         + dot(u_w, v)/dt
         + c(u_k, u_w, v) + c(u_w, u_k, v) + b(v, p_w)
-        + a(mu, u_w, v) 
-        + dot(T_w*ddT_f_B(T_k), v)
+        + a(T_w*dmu(T_k), u_k, v) + a(mu(T_k), u_w, v) 
+        + dot(T_w*df_B(T_k), v)
         + C/dt*T_w*phi
         - dot(C*T_k*u_w, grad(phi))
         - dot(C*T_w*u_k, grad(phi))
         + K/Pr*dot(grad(T_w), grad(phi))
+        + 1./dt*L*T_w*dP(T_k)*phi
         )*fenics.dx
 
         
     # Set goal functional for adaptive mesh refinement.
-    M = (u_k[0] + u_k[1] + T_k)*fenics.dx
+    M = (u_k[0] + u_k[1] + T_k + P(T_k))*fenics.dx
     
     
     # Return the nonlinear variational form, its Gateaux derivative, and the AMR metric
@@ -154,8 +176,9 @@ def test_adaptive_natural_convection_in_differentially_heated_cavity():
     
     dt = fenics.Constant(time_step_size)
     
-    F, JF, M = forms(W=W, w_k=w_k, w_n=w_n, dt=dt, viscosity=1.,
-        rayleigh_number=1.e6, prandtl_number=0.71, gravity = (0., -1.))
+    F, JF, M = forms(W=W, w_k=w_k, w_n=w_n, dt=dt, liquid_viscosity=1.,
+        rayleigh_number=1.e6, prandtl_number=0.71, gravity = (0., -1.),
+        T_f = -1.)
     
     problem = fenics.NonlinearVariationalProblem(F, w_k, bcs, JF)
     
@@ -230,8 +253,8 @@ def lid_driven_cavity(adaptive):
     
     dt = fenics.Constant(time_step_size)
     
-    F, JF, M = forms(W=W, w_k=w_k, w_n=w_n, dt=dt, viscosity=0.01,
-        rayleigh_number=1., prandtl_number=1., gravity = (0., 0.))
+    F, JF, M = forms(W=W, w_k=w_k, w_n=w_n, dt=dt, liquid_viscosity=0.01,
+        rayleigh_number=1., prandtl_number=1., gravity = (0., 0.), T_f=-1.)
     
     problem = fenics.NonlinearVariationalProblem(F, w_k, bcs, JF)
     
