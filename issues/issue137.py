@@ -40,9 +40,7 @@ class Model():
         
         self.w_k = fenics.Function(self.W)
         
-        self.w_n = fenics.interpolate(
-            fenics.Expression(initial_values, element=self.W_ele),
-            self.W)
+        self.w_n = fenics.Expression(initial_values, element=self.W_ele)
         
         self.bcs = []
     
@@ -220,7 +218,13 @@ class Model():
         
         
         # Update initial values for the next time step.
-        self.w_n.leaf_node().vector()[:] = self.w_k.leaf_node().vector()  
+        if type(self.w_n) is not type(self.w_k):  # Handle case where w_n is fenics.Expression
+        
+            self.w_n = self.w_k.copy(deepcopy=True)
+            
+        else:
+            
+            self.w_n.leaf_node().vector()[:] = self.w_k.leaf_node().vector()  
     
 
 def test_adaptive_natural_convection_in_differentially_heated_cavity():
@@ -404,6 +408,19 @@ def test_adaptive_melting_pcm():
             
 def test_1d_stefan_problem():
 
+    def write_solution(solution_file, w, W, time):
+
+        u, p, T = w.leaf_node().split()
+        
+        T.rename("T", "temperature")
+        
+        coordinates = W.tabulate_dof_coordinates()
+        
+        for x in coordinates:
+        
+            solution_file.write(str(time)+", "+str(x)+", "+str(T(x))+"\n")
+
+    
     mesh = fenics.UnitIntervalMesh(10)
     
     T_hot, T_cold = 1., -1
@@ -459,16 +476,17 @@ def test_1d_stefan_problem():
         gravity=[0.],
         temperature_of_fusion=0.01, smoothing_radius=0.05)
     
-    
-    
     progress = fenics.Progress('Time-stepping')
 
     fenics.set_log_level(fenics.PROGRESS)
     
-    with fenics.XDMFFile('output/stefan_problem/solution.xdmf') as solution_file:
+    with open('output/stefan_problem/solution.csv', 'w+') as solution_file:
+    
+        solution_file.write("t, x, T\n")
     
         # Write the initial values
-        write_solution(solution_file, model.w_n, model.time)
+        write_solution(solution_file, fenics.interpolate(model.w_n, model.W),
+            model.W, model.time)
         
         
         # Solve a sequence of time steps.
@@ -478,7 +496,7 @@ def test_1d_stefan_problem():
         
             model.solve(adaptive=True, adaptive_tolerance=1.e-8)
 
-            write_solution(solution_file, model.w_k, model.time)
+            write_solution(solution_file, model.w_k, model.W, model.time)
             
             progress.update(model.time / end_time)
             
