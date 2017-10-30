@@ -36,18 +36,19 @@ class Model():
         
         self.velocity_degree = self.pressure_degree + 1
         
-        self.W, self.W_ele = self.make_mixed_fe(mesh)
+        self.W_ele = self.make_mixed_fe(mesh)
+        
+        self.W = fenics.FunctionSpace(self.mesh, self.W_ele)
         
         self.w_k = fenics.Function(self.W)
         
         self.w_n = fenics.Expression(initial_values, element=self.W_ele)
         
+        self.bc_dicts = boundary_conditions
+        
         self.bcs = []
-    
-        for item in boundary_conditions:
-
-            self.bcs.append(fenics.DirichletBC(self.W.sub(item['subspace']),
-                item['value'], item['location'], method=item['method']))
+        
+        self.update_bcs()
         
         self.time = time
         
@@ -79,12 +80,10 @@ class Model():
         
         
     def make_mixed_fe(self, mesh):
-        """ Define mixed FE function space for the variational form."""
-        
-        ''' MixedFunctionSpace used to be available but is now deprecated. 
-        The way that fenics separates function spaces and elements is confusing.
+        """ Define mixed finite element.
+        MixedFunctionSpace used to be available but is now deprecated. 
         To create the mixed space, I'm using the approach from https://fenicsproject.org/qa/11983/mixedfunctionspace-in-2016-2-0
-        '''
+        """
         velocity_element = fenics.VectorElement('P', mesh.ufl_cell(),
             self.velocity_degree)
 
@@ -96,13 +95,22 @@ class Model():
 
         solution_element = fenics.MixedElement([velocity_element, pressure_element, 
             temperature_element])
+        
+        return solution_element
+        
+        
+    def update_bcs(self):
+        """ Parse boundary condition dictionaries and apply them in the space W."""
+        self.bcs = []
+    
+        for item in self.bc_dicts:
 
-        solution_function_space = fenics.FunctionSpace(mesh, solution_element)  
+            self.bcs.append(fenics.DirichletBC(self.W.sub(item['subspace']),
+                item['value'], item['location'], method=item['method']))
+                
         
-        return solution_function_space, solution_element
-        
-        
-    def solve(self, adaptive, adaptive_tolerance=None):
+    def solve(self, adaptive, adaptive_tolerance=None, newton_relative_tolerance=1.e-8):
+        """ Define and solve the variational problem. """
         
         mu_l = fenics.Constant(self.liquid_viscosity)
         
@@ -202,15 +210,21 @@ class Model():
         # Solve the problem.
         if adaptive:
 
-            M = (u_k[0] + T_k + P(T_k))*fenics.dx  # Adaptive goal functional
+            M = P(T_k)*fenics.dx  # Adaptive goal functional
     
             solver = fenics.AdaptiveNonlinearVariationalSolver(problem, M)
             
+            solver.parameters['nonlinear_variational_solver']['newton_solver']['relative_tolerance'] = \
+                newton_relative_tolerance
+            
             solver.solve(adaptive_tolerance)
-        
+            
         else:
         
             solver = fenics.NonlinearVariationalSolver(problem)
+            
+            solver.parameters['newton_solver']['relative_tolerance'] = \
+                newton_relative_tolerance
             
             solver.solve()
             
@@ -218,14 +232,21 @@ class Model():
         
         
         # Update initial values for the next time step.
-        if type(self.w_n) is not type(self.w_k):  # Handle case where w_n is fenics.Expression
-        
-            self.w_n = self.w_k.copy(deepcopy=True)
-            
-        else:
-            
-            self.w_n.leaf_node().vector()[:] = self.w_k.leaf_node().vector()  
+        self.w_n = self.w_k.leaf_node().copy()
     
+        """If the mesh was refined during adaptive solving, then update the mesh, solution space,
+        solution function, and boundary conditions.
+        """
+        if adaptive and (self.w_k.depth > 1):
+        
+            self.mesh = self.mesh.leaf_node()
+            
+            self.W = fenics.FunctionSpace(self.mesh, self.W_ele)
+            
+            self.w_k = fenics.Function(self.W)
+            
+            self.update_bcs()
+            
 
 def test_adaptive_natural_convection_in_differentially_heated_cavity():
     
@@ -331,15 +352,13 @@ def test_adaptive_lid_driven_cavity():
     
 def test_adaptive_melting_pcm():
     
-    m = 1
+    
+    # Make the mesh
+    m = 20
     
     mesh = fenics.UnitSquareMesh(m, m, 'crossed')
     
-    T_hot, T_cold = 1., -0.1
-    
-    
-    # Refine the initial mesh near the hot wall
-    initial_hot_wall_refinement_cycles = 6
+    initial_hot_wall_refinement_cycles = 2
     
     class HotWall(fenics.SubDomain):
         
@@ -362,9 +381,7 @@ def test_adaptive_melting_pcm():
     
     
     # Make the model.
-    start_time, end_time = 0., 0.002
-    
-    time_step_size = 1.e-3
+    T_hot, T_cold = 1., -0.1
     
     model = Model(mesh=mesh,
         pressure_degree = 1,
@@ -381,7 +398,7 @@ def test_adaptive_melting_pcm():
             {'subspace': 2, 'value': str(T_cold),
             'location': "near(x[0],  1.)",
             'method': 'topological'}],
-        time=start_time, time_step_size=time_step_size, liquid_viscosity=1.,
+        time=0., time_step_size=1.e-3, liquid_viscosity=1.,
         rayleigh_number=1., prandtl_number=1., stefan_number=1.,
         gravity=(0., -1.),
         temperature_of_fusion=0.1, smoothing_radius=0.05)
@@ -394,14 +411,17 @@ def test_adaptive_melting_pcm():
         
     with fenics.XDMFFile('output/melting_pcm/solution.xdmf') as solution_file:
     
-        # Write the initial values
-        write_solution(solution_file, model.w_n, model.time)
+        write_solution(solution_file, fenics.interpolate(model.w_n, model.W), model.time)
             
+        end_time = 0.01
+        
         while model.time < (end_time - fenics.DOLFIN_EPS):
         
             model.solve(adaptive=True, adaptive_tolerance=1.e-4)
+            
+            print("Reached time t = ", str(model.time))
 
-            write_solution(solution_file, model.w_k, model.time)
+            write_solution(solution_file, model.w_n, model.time)
             
             progress.update(model.time / end_time)
             
@@ -494,7 +514,7 @@ def test_1d_stefan_problem():
         
         while model.time < (end_time - fenics.DOLFIN_EPS):
         
-            model.solve(adaptive=True, adaptive_tolerance=1.e-8)
+            model.solve(adaptive=True, adaptive_tolerance=1.e-4, newton_relative_tolerance=1.e-4)
 
             write_solution(solution_file, model.w_k, model.W, model.time)
             
@@ -503,7 +523,7 @@ def test_1d_stefan_problem():
     
 if __name__=='__main__':
     
-    test_1d_stefan_problem()
+    #test_1d_stefan_problem()
     
     #test_adaptive_natural_convection_in_differentially_heated_cavity()
     
@@ -511,5 +531,5 @@ if __name__=='__main__':
     
     #test_adaptive_lid_driven_cavity()
     
-    #test_adaptive_melting_pcm()
+    test_adaptive_melting_pcm()
     
