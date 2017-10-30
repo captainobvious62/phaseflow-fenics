@@ -413,7 +413,7 @@ def test_adaptive_melting_pcm():
     
         write_solution(solution_file, fenics.interpolate(model.w_n, model.W), model.time)
             
-        end_time = 0.01
+        end_time = 0.025
         
         while model.time < (end_time - fenics.DOLFIN_EPS):
         
