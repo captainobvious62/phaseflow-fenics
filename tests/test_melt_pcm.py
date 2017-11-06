@@ -148,7 +148,7 @@ def melt_octadecane_pcm(output_dir = 'output/test_melt_octadecane_pcm/',
     T_cold = -0.01
     
     w, mesh = phaseflow.run(
-        stefan_number = 1.,
+        stefan_number = 0.045,
         rayleigh_number = 1.e6,
         prandtl_number = 0.71,
         solid_viscosity = 1.e4,
@@ -164,7 +164,7 @@ def melt_octadecane_pcm(output_dir = 'output/test_melt_octadecane_pcm/',
         adaptive_metric = 'phase_only',
         adaptive_solver_tolerance = 1.e-4,
         nlp_relative_tolerance = 1.e-8,
-        nlp_max_iterations = 50,
+        nlp_max_iterations = 100,
         initial_values_expression = (
             "0.",
             "0.",
