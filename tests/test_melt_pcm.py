@@ -108,7 +108,8 @@ def test_melt_toy_pcm__regression():
     
 
 def melt_octadecane_pcm(output_dir = 'output/test_melt_octadecane_pcm/',
-        restart = False, restart_filepath = '', start_time = 0.):
+        restart = False, restart_filepath = '', start_time = 0.,
+        time_step_size = 1.e-3):
     
     
     # Make the mesh.
@@ -150,9 +151,9 @@ def melt_octadecane_pcm(output_dir = 'output/test_melt_octadecane_pcm/',
         solid_viscosity = 1.e4,
         liquid_viscosity = 1.,
         mesh = mesh,
-        time_step_size = 1.e-3,
+        time_step_size = time_step_size,
         start_time = start_time,
-        end_time = 0.02,
+        end_time = time_step_size,
         stop_when_steady = True,
         temperature_of_fusion = T_f,
         regularization_smoothing_factor = 0.05,
