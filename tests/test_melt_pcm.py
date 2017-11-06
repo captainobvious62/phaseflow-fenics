@@ -149,7 +149,7 @@ def melt_octadecane_pcm(output_dir = 'output/test_melt_octadecane_pcm/',
     
     w, mesh = phaseflow.run(
         stefan_number = 0.045,
-        rayleigh_number = 1.e6,
+        rayleigh_number = 3.27e5,
         prandtl_number = 0.71,
         solid_viscosity = 1.e4,
         liquid_viscosity = 1.,
