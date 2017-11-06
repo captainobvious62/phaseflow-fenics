@@ -2,10 +2,11 @@ import fenics
 import phaseflow
 import scipy.optimize as opt
 
-T_f = 0.1
 
 def melt_toy_pcm(output_dir = 'output/test_melt_toy_pcm/',
         restart = False, restart_filepath = '', start_time = 0.):
+    
+    T_f = 0.1
     
     
     # Make the mesh.
@@ -91,6 +92,8 @@ def test_melt_toy_pcm__regression():
     
     
     # Verify against a reference solution.
+    T_f = 0.1
+    
     pci_y_position_to_check =  0.875
     
     reference_pci_x_position = 0.226
@@ -142,7 +145,7 @@ def melt_octadecane_pcm(output_dir = 'output/test_melt_octadecane_pcm/',
     # Run phaseflow.
     T_hot = 1.
     
-    T_cold = -0.1
+    T_cold = -0.01
     
     w, mesh = phaseflow.run(
         stefan_number = 1.,
@@ -155,7 +158,7 @@ def melt_octadecane_pcm(output_dir = 'output/test_melt_octadecane_pcm/',
         start_time = start_time,
         end_time = time_step_size,
         stop_when_steady = True,
-        temperature_of_fusion = T_f,
+        temperature_of_fusion = 0.01,
         regularization_smoothing_factor = 0.05,
         adaptive = True,
         adaptive_metric = 'phase_only',
