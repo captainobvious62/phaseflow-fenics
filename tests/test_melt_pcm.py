@@ -109,8 +109,106 @@ def test_melt_toy_pcm__regression():
     assert(abs(pci_x_position - reference_pci_x_position) < 1.e-2)
     
     
+def melt_octadecane_pcm(output_dir = "output/test_melt_octadecane_pcm/",
+        restart = False, restart_filepath = "", start_time = 0.,
+        time_step_size = 1.e-3,
+        end_time = 1.e-3,
+        regularization_smoothing_factor = 0.005,
+        nlp_max_iterations = 10,
+        newton_relaxation = 0.5):
+    
+    
+    # Make the mesh.
+    initial_mesh_size = 1
+    
+    mesh = fenics.UnitSquareMesh(initial_mesh_size, initial_mesh_size)
+    
+    initial_hot_wall_refinement_cycles = 9
+    
+    class HotWall(fenics.SubDomain):
+        
+        def inside(self, x, on_boundary):
+        
+            return on_boundary and fenics.near(x[0], 0.)
+
+            
+    hot_wall = HotWall()
+    
+    for i in range(initial_hot_wall_refinement_cycles):
+        
+        edge_markers = fenics.EdgeFunction("bool", mesh)
+        
+        hot_wall.mark(edge_markers, True)
+
+        fenics.adapt(mesh, edge_markers)
+        
+        mesh = mesh.child()
+    
+    
+    # Run phaseflow.
+    T_hot = 1.
+    
+    T_cold = -0.01
+    
+    w, mesh = phaseflow.run(
+        stefan_number = 0.045,
+        rayleigh_number = 3.27e5,
+        prandtl_number = 56.2,
+        solid_viscosity = 1.e8,
+        liquid_viscosity = 1.,
+        mesh = mesh,
+        time_step_size = time_step_size,
+        start_time = start_time,
+        end_time = end_time,
+        stop_when_steady = True,
+        temperature_of_fusion = 0.01,
+        regularization_smoothing_factor = regularization_smoothing_factor,
+        adaptive = True,
+        adaptive_metric = "phase_only",
+        adaptive_solver_tolerance = 1.e-4,
+        nlp_relative_tolerance = 1.e-8,
+        nlp_max_iterations = nlp_max_iterations,
+        newton_relaxation = newton_relaxation,
+        initial_values_expression = (
+            "0.",
+            "0.",
+            "0.",
+            "("+str(T_hot)+" - "+str(T_cold)+")*(x[0] < 0.001) + "+str(T_cold)),
+        boundary_conditions = [
+            {'subspace': 0, 'value_expression': ("0.", "0."), 'degree': 3,
+                'location_expression': "near(x[0],  0.) | near(x[0],  1.) | near(x[1], 0.) | near(x[1],  1.)",
+                'method': "topological"},
+            {'subspace': 2, 'value_expression': str(T_hot), 'degree': 2,
+                'location_expression': "near(x[0],  0.)",
+                'method': "topological"},
+            {'subspace': 2, 'value_expression': str(T_cold), 'degree': 2,
+                'location_expression': "near(x[0],  1.)",
+                'method': "topological"}],
+        output_dir = output_dir,
+        restart = restart,
+        restart_filepath = restart_filepath)
+    
+    return w
+
+
+def test_melt_octadecane_pcm():
+
+    melt_octadecane_pcm()
+    
+    """
+    melt_octadecane_pcm(restart = True,
+        restart_filepath='output/test_melt_octadecane_pcm/restart_t0.001.h5',
+        start_time = 0.001,
+        end_time = 0.002,
+        regularization_smoothing_factor = 0.05,
+        nlp_max_iterations = 200,
+        output_dir = 'output/test_melt_octadecane_pcm/restart_t0.001/')
+    """
+    
 if __name__=='__main__':
 
     test_melt_toy_pcm__regression()
+    
+    test_melt_octadecane_pcm()
     
     

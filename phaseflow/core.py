@@ -111,6 +111,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
         nlp_absolute_tolerance = 1.e-8,
         nlp_relative_tolerance = 1.e-8,
         nlp_max_iterations = 50,
+        newton_relaxation = 1.,
         restart = False,
         restart_filepath = ""):
     """Run Phaseflow.
@@ -382,6 +383,9 @@ def run(output_dir = "output/wang2010_natural_convection_air",
     
     adaptive_solver.parameters["nonlinear_variational_solver"]["newton_solver"]["relative_tolerance"]\
         = nlp_relative_tolerance
+        
+    adaptive_solver.parameters["nonlinear_variational_solver"]["newton_solver"]["relaxation_parameter"]\
+        = newton_relaxation
 
     static_solver = fenics.NonlinearVariationalSolver(problem)
     
@@ -391,6 +395,8 @@ def run(output_dir = "output/wang2010_natural_convection_air",
     
     static_solver.parameters["newton_solver"]["relative_tolerance"] = nlp_relative_tolerance
     
+    static_solver.parameters["newton_solver"]["relaxation_parameter"]\
+        = newton_relaxation
     
     # Open a context manager for the output file.
     with fenics.XDMFFile(output_dir + "/solution.xdmf") as solution_file:
