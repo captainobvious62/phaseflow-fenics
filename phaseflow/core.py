@@ -105,7 +105,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
         start_time = 0.,
         end_time = 10.,
         time_step_size = 1.e-3,
-        stodphen_steady = True,
+        stop_when_steady = True,
         steady_relative_tolerance=1.e-4,
         adaptive = False,
         adaptive_metric = "all",
@@ -267,7 +267,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
     
     def phi(T): # Regularized semi-phase-field
     
-        return 0.5*(1. + fenics.tanh((T - T_r)/r))  
+        return 0.5*(1. + fenics.tanh((T_r - T)/r))  
     
     
     def P(P_L, P_S, T):
@@ -348,7 +348,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
         
         def dphi(T):
         
-            return sech((T - T_r)/r)**2/(2.*r)
+            return -sech((T_r - T)/r)**2/(2.*r)
             
             
         def dP(P_S, P_L, T):
@@ -502,7 +502,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
             
             
             # Check for steady state.
-            if stodphen_steady and steady(W, w_m, w_n, steady_relative_tolerance):
+            if stop_when_steady and steady(W, w_m, w_n, steady_relative_tolerance):
             
                 phaseflow.helpers.print_once("Reached steady state at time t = " + str(time))
                 
