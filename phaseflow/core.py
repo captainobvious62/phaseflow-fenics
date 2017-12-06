@@ -312,7 +312,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
 
     def d(f):
     
-        return 1./(cp_L*Delta_t)*psi_T*(2*f(T_m)*cp(T_m) - f(T_m)*cp(T_n) - f(T_n)*cp(T_m))
+        return 1./(cp_L*Delta_t)*psi_T*(2.*f(T_m)*cp(T_m) - f(T_m)*cp(T_n) - f(T_n)*cp(T_m))
     
     
     F = (
@@ -323,7 +323,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
         + d(lambda T: T)
         - 1./cp_L*dot(grad(psi_T), cp(T_m)*T_m*u_m)
         + 1./(k_L*Pr)*dot(grad(psi_T), k(T_m)*grad(T_m))
-        - 1./Ste*d(phi)
+        + 1./Ste*d(phi)
         )*fenics.dx
 
     dw = fenics.TrialFunction(W)
@@ -385,7 +385,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
             + 1./mu_L*(a(dT*dmu(T_m), u_m, psi_u) + a(mu(T_m), du, psi_u))
             + dot(psi_u, dT*df_B(T_m))
             + Dd(f=lambda T: T, df=lambda T: 1.) 
-            - 1./Ste*Dd(phi, dphi)
+            + 1./Ste*Dd(f=phi, df=dphi)
             + 1./(k_L*Pr)*dot(grad(psi_T), dT*dk(T_m)*grad(T_m) + k(T_m)*grad(dT))
             - 1./cp_L*dot(grad(psi_T), dT*dcp(T_m)*T_m*u_m + cp(T_m)*(dT*u_m + T_m*du))
             )*fenics.dx
