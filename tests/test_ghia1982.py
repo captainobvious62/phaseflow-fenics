@@ -21,7 +21,7 @@ def verify_against_ghia1982(w, mesh):
             assert(abs(ux - true_ux) < 2.e-2)
 
 
-def test_ghia1982_steady_lid_driven_cavity():
+def ghia1982_steady_lid_driven_cavity():
 
     lid = "near(x[1],  1.)"
 
@@ -49,8 +49,12 @@ def test_ghia1982_steady_lid_driven_cavity():
 
     verify_against_ghia1982(w, mesh)
 
+
+def test_ghia1982_steady_lid_driven_cavity():
+
+    ghia1982_steady_lid_driven_cavity()
+    
     
 if __name__=='__main__':
 
     test_ghia1982_steady_lid_driven_cavity()
-
