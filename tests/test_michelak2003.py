@@ -86,7 +86,7 @@ def natural_convection_water(restart = False, restart_filepath = '',
             return Ra/(Pr*Re*Re)/(beta*(T_h - T_c))*(rho(theta_f) - rho(T))/rho(theta_f)
             
             
-    def ddT_m_B(T, Ra, Pr, Re):
+    def dm_B(T, Ra, Pr, Re):
     
         return -Ra/(Pr*Re*Re)/(beta*(T_h - T_c))*(ddtheta_rho(T))/rho(theta_f)
         
@@ -95,12 +95,12 @@ def natural_convection_water(restart = False, restart_filepath = '',
         rayleigh_number = Ra,
         prandtl_number = Pr,
         stefan_number = 1.e16,
-        temperature_of_fusion = -1.,
+        regularization_central_temperature = -1.,
         regularization_smoothing_factor = 0.1,
         nlp_relative_tolerance = 1.e-8,
         adaptive = False,
         m_B = m_B,
-        ddT_m_B = ddT_m_B,
+        dm_B = dm_B,
         mesh = fenics.UnitSquareMesh(m, m, 'crossed'),
         stop_when_steady = True,
         steady_relative_tolerance = 1.e-5,
