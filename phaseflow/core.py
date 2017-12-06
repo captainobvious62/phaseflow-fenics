@@ -37,12 +37,12 @@ def make_mixed_fe(cell):
     return mixed_element
 
     
-def write_solution(solution_file, w_k, time):
+def write_solution(solution_file, w_m, time):
     """Write the solution to disk."""
 
     phaseflow.helpers.print_once("Writing solution to HDF5+XDMF")
     
-    velocity, pressure, temperature = w_k.leaf_node().split()
+    velocity, pressure, temperature = w_m.leaf_node().split()
     
     velocity.rename("u", "velocity")
     
@@ -79,15 +79,17 @@ def run(output_dir = "output/wang2010_natural_convection_air",
         rayleigh_number = 1.e6,
         prandtl_number = 0.71,
         stefan_number = 0.045,
-        heat_capacity = 1.,
-        thermal_conductivity = 1.,
+        liquid_heat_capacity = 1.,
+        solid_heat_capacity = 1.,
+        liquid_thermal_conductivity = 1.,
+        solid_thermal_conductivity = 1.,
         liquid_viscosity = 1.,
         solid_viscosity = 1.e8,
         gravity = (0., -1.),
         m_B = None,
-        ddT_m_B = None,
+        dm_B = None,
         penalty_parameter = 1.e-7,
-        temperature_of_fusion = -1.e12,
+        regularization_central_temperature= -1.e12,
         regularization_smoothing_factor = 0.005,
         mesh = fenics.UnitSquareMesh(fenics.dolfin.mpi_comm_world(), 20, 20, "crossed"),
         initial_values_expression = ("0.", "0.", "0.", "0.5*near(x[0],  0.) -0.5*near(x[0],  1.)"),
@@ -103,7 +105,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
         start_time = 0.,
         end_time = 10.,
         time_step_size = 1.e-3,
-        stop_when_steady = True,
+        stodphen_steady = True,
         steady_relative_tolerance=1.e-4,
         adaptive = False,
         adaptive_metric = "all",
@@ -111,6 +113,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
         nlp_absolute_tolerance = 1.e-8,
         nlp_relative_tolerance = 1.e-8,
         nlp_max_iterations = 50,
+        automatic_jacobian = False,
         restart = False,
         restart_filepath = ""):
     """Run Phaseflow.
@@ -129,9 +132,9 @@ def run(output_dir = "output/wang2010_natural_convection_air",
             return T*Ra/(Pr*Re**2)
     
     
-    if ddT_m_B is None:
+    if dm_B is None:
         
-        def ddT_m_B(T, Ra, Pr, Re):
+        def dm_B(T, Ra, Pr, Re):
 
             return Ra/(Pr*Re**2)
     
@@ -239,7 +242,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
         return dot(dot(grad(z), w), v)  # Convection of the velocity field
     
     
-    dt = fenics.Constant(time_step_size)
+    Delta_t = fenics.Constant(time_step_size)
     
     Re = fenics.Constant(reynolds_number)
     
@@ -249,95 +252,144 @@ def run(output_dir = "output/wang2010_natural_convection_air",
     
     Ste = fenics.Constant(stefan_number)
     
-    C = fenics.Constant(heat_capacity)
-    
-    K = fenics.Constant(thermal_conductivity)
-
     g = fenics.Constant(gravity)
     
-    def f_B(T):
+    def f_B(T): # Buoyancy force, $f = ma$
     
-        return m_B(T=T, Ra=Ra, Pr=Pr, Re=Re)*g  # Buoyancy force, $f = ma$
+        return m_B(T=T, Ra=Ra, Pr=Pr, Re=Re)*g  
     
     
     gamma = fenics.Constant(penalty_parameter)
     
-    T_f = fenics.Constant(temperature_of_fusion)
+    T_r = fenics.Constant(regularization_central_temperature)
     
     r = fenics.Constant(regularization_smoothing_factor)
     
-    def P(T):
+    def phi(T): # Regularized semi-phase-field
     
-        return 0.5*(1. - fenics.tanh((T_f - T)/r))  # Regularized phase field.
-    
-    
-    mu_l = fenics.Constant(liquid_viscosity)
-    
-    mu_s = fenics.Constant(solid_viscosity)
-    
-    def mu(T):
-    
-        return mu_s + (mu_l - mu_s)*P(T) # Variable viscosity.
+        return 0.5*(1. + fenics.tanh((T - T_r)/r))  
     
     
-    L = C/Ste  # Latent heat
+    def P(P_L, P_S, T):
+    
+        return P_L + (P_S - P_L)*phi(T)
+
+    
+    mu_L = fenics.Constant(liquid_viscosity)
+    
+    mu_S = fenics.Constant(solid_viscosity)
+    
+    def mu(T): # Variable viscosity
+    
+        return P(P_L = mu_L, P_S = mu_S, T = T)
+    
+    
+    cp_L = fenics.Constant(liquid_heat_capacity)
+    
+    cp_S = fenics.Constant(solid_heat_capacity)
+
+    def cp(T): # Variable heat capacity
+    
+        return P(P_L = cp_L, P_S = cp_S, T = T)
+    
+    
+    k_L = fenics.Constant(liquid_thermal_conductivity)
+    
+    k_S = fenics.Constant(solid_thermal_conductivity)
+    
+    def k(T): # Variable thermal conductivity
+    
+        return P(P_L = k_L, P_S = k_S, T = T)
+    
     
     u_n, p_n, T_n = fenics.split(w_n)
 
-    w_w = fenics.TrialFunction(W)
+    psi_u, psi_p, psi_T = fenics.TestFunctions(W)
     
-    u_w, p_w, T_w = fenics.split(w_w)
+    w_m = fenics.Function(W)
     
-    v, q, phi = fenics.TestFunctions(W)
-    
-    w_k = fenics.Function(W)
-    
-    u_k, p_k, T_k = fenics.split(w_k)
+    u_m, p_m, T_m = fenics.split(w_m)
 
+    def d(f):
+    
+        return 1./(cp_L*Delta_t)*psi_T*(2*f(T_m)*cp(T_m) - f(T_m)*cp(T_n) - f(T_n)*cp(T_m))
+    
+    
     F = (
-        b(u_k, q) - gamma*p_k*q
-        + dot(u_k - u_n, v)/dt
-        + c(u_k, u_k, v) + b(v, p_k) + a(mu(T_k), u_k, v)
-        + dot(f_B(T_k), v)
-        + C/dt*(T_k - T_n)*phi
-        - dot(C*T_k*u_k, grad(phi)) 
-        + K/Pr*dot(grad(T_k), grad(phi))
-        + 1./dt*L*(P(T_k) - P(T_n))*phi
+        b(u_m, psi_p) - gamma*psi_p*p_m
+        + 1./Delta_t*dot(psi_u, u_m - u_n)
+        + c(u_m, u_m, psi_u) + b(psi_u, p_m) + 1./mu_L*a(mu(T_m), u_m, psi_u)
+        + dot(psi_u, f_B(T_m))
+        + d(lambda T: T)
+        - 1./cp_L*dot(u_m, grad(psi_T))*T_m*cp(T_m)
+        + 1./(k_L*Pr)*dot(grad(psi_T), k(T_m)*grad(T_m))
+        - 1./Ste*d(phi)
         )*fenics.dx
 
-    def ddT_f_B(T):
+    dw = fenics.TrialFunction(W)
+    
+    if automatic_jacobian:
+    
+        JF = fenics.derivative(F, w_m, dw)
         
-        return ddT_m_B(T=T, Ra=Ra, Pr=Pr, Re=Re)*g
+    else:
     
-    
-    def sech(theta):
-    
-        return 1./fenics.cosh(theta)
-    
-    
-    def dP(T):
-    
-        return sech((T_f - T)/r)**2/(2.*r)
+        du, dp, dT = fenics.split(dw)
 
+        def df_B(T):
+            
+            return dm_B(T=T, Ra=Ra, Pr=Pr, Re=Re)*g
         
-    def dmu(T):
-    
-        return (mu_l - mu_s)*dP(T)
-    
-    
-    # Set the Jacobian (formally the Gateaux derivative) in variational form.
-    JF = (
-        b(u_w, q) - gamma*p_w*q 
-        + dot(u_w, v)/dt
-        + c(u_k, u_w, v) + c(u_w, u_k, v) + b(v, p_w)
-        + a(T_w*dmu(T_k), u_k, v) + a(mu(T_k), u_w, v) 
-        + dot(T_w*ddT_f_B(T_k), v)
-        + C/dt*T_w*phi
-        - dot(C*T_k*u_w, grad(phi))
-        - dot(C*T_w*u_k, grad(phi))
-        + K/Pr*dot(grad(T_w), grad(phi))
-        + 1./dt*L*T_w*dP(T_k)*phi
-        )*fenics.dx
+        
+        def sech(theta):
+        
+            return 1./fenics.cosh(theta)
+        
+        
+        def dphi(T):
+        
+            return sech((T - T_r)/r)**2/(2.*r)
+            
+            
+        def dP(P_S, P_L, T):
+        
+            return (P_S - P_L)*dphi(T_m)
+
+            
+        def dmu(T):
+        
+            return dP(P_L = mu_L, P_S = mu_S, T = T)
+            
+            
+        def dcp(T):
+        
+            return dP(P_L = cp_L, P_S = cp_S, T = T)
+            
+        
+        def dk(T):
+        
+            return dP(P_L = k_L, P_S = k_S, T = T)
+            
+            
+        def Dd(f, df):
+        
+            return 1./(cp_L*Delta_t)*psi_T*dT* \
+                (2.*(df(T_m)*cp(T_m) + f(T_m)*dcp(T_m)) - df(T_m)*cp(T_n) - f(T_n)*dcp(T_m))
+        
+        # Set the Jacobian (formally the Gateaux derivative) in variational form.
+        JF = (
+            b(du, psi_p) - gamma*dp*psi_p
+            + 1./Delta_t*dot(psi_u, du) 
+            + c(u_m, du, psi_u) + c(du, u_m, psi_u) 
+            + b(psi_u, dp)
+            + 1./mu_L*(a(dT*dmu(T_m), u_m, psi_u) + a(mu(T_m), du, psi_u))
+            + dot(psi_u, dT*df_B(T_m))
+            + Dd(f=lambda T: T, df=lambda T: 1.) 
+            - 1./Ste*Dd(phi, dphi)
+            + 1./(k_L*Pr)*dot(grad(psi_T), dT*dk(T_m)*grad(T_m) + k(T_m)*grad(dT))
+            - 1./cp_L*(dot(du,grad(psi_T))*T_m*cp(T_m) 
+                - dot(u_m,grad(psi_T))*(dT*T_m*dcp(T_m) + dT*cp(T_m)))
+            )*fenics.dx
 
         
     # Set the functional metric for the error estimator for adaptive mesh refinement.
@@ -345,7 +397,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
     Ideally the user would be able to write the metric, but this would require giving the user
     access to much data that phaseflow is currently hiding.
     """
-    M = P(T_k)*fenics.dx
+    M = phi(T_m)*fenics.dx
     
     if adaptive_metric == "phase_only":
     
@@ -353,18 +405,19 @@ def run(output_dir = "output/wang2010_natural_convection_air",
         
     elif adaptive_metric == "all":
         
-        M += T_k*fenics.dx
+        M += T_m*fenics.dx
         
         for i in range(dimensionality):
         
-            M += u_k[i]*fenics.dx
+            M += u_m[i]*fenics.dx
             
     else:
         
         assert(False)
         
+        
     # Make the problem.
-    problem = fenics.NonlinearVariationalProblem(F, w_k, bcs, JF)
+    problem = fenics.NonlinearVariationalProblem(F, w_m, bcs, JF)
     
     
     # Make the solvers.
@@ -429,7 +482,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
             
             phaseflow.helpers.print_once("Reached time t = " + str(time))
             
-            write_solution(solution_file, w_k, time)
+            write_solution(solution_file, w_m, time)
             
             
             # Write checkpoint/restart files.
@@ -439,7 +492,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
                 
                 h5.write(mesh.leaf_node(), "mesh")
             
-                h5.write(w_k.leaf_node(), "w")
+                h5.write(w_m.leaf_node(), "w")
                 
             if fenics.MPI.rank(fenics.mpi_comm_world()) is 0:
             
@@ -449,7 +502,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
             
             
             # Check for steady state.
-            if stop_when_steady and steady(W, w_k, w_n, steady_relative_tolerance):
+            if stodphen_steady and steady(W, w_m, w_n, steady_relative_tolerance):
             
                 phaseflow.helpers.print_once("Reached steady state at time t = " + str(time))
                 
@@ -457,7 +510,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
                 
                 
             # Set initial values for next time step.
-            w_n.leaf_node().vector()[:] = w_k.leaf_node().vector()
+            w_n.leaf_node().vector()[:] = w_m.leaf_node().vector()
             
             
             # Report progress.
@@ -471,9 +524,9 @@ def run(output_dir = "output/wang2010_natural_convection_air",
     
     
     # Return the interpolant to sample inside of Python.
-    w_k.rename("w", "state")
+    w_m.rename("w", "state")
     
-    return w_k, mesh
+    return w_m, mesh
     
     
 if __name__=="__main__":
