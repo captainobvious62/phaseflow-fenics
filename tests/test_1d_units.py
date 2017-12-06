@@ -25,7 +25,7 @@ def test_1d_output():
             {"subspace": 0, "value_expression": [0.], "degree": 3, "location_expression": "near(x[0],  0.) | near(x[0],  1.)", "method": "topological"},
             {"subspace": 2, "value_expression": T_h, "degree": 2, "location_expression": "near(x[0],  0.)", "method": "topological"},
             {"subspace": 2, "value_expression": T_c, "degree": 2, "location_expression": "near(x[0],  1.)", "method": "topological"}],
-        temperature_of_fusion = 0.01,
+        regularization_central_temperature = 0.01,
         regularization_smoothing_factor = 0.005,
         end_time = 0.001,
         time_step_size = 0.001)
