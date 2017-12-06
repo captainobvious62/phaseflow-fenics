@@ -321,7 +321,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
         + c(u_m, u_m, psi_u) + b(psi_u, p_m) + 1./mu_L*a(mu(T_m), u_m, psi_u)
         + dot(psi_u, f_B(T_m))
         + d(lambda T: T)
-        - 1./cp_L*dot(u_m, grad(psi_T))*T_m*cp(T_m)
+        - 1./cp_L*dot(grad(psi_T), cp(T_m)*T_m*u_m)
         + 1./(k_L*Pr)*dot(grad(psi_T), k(T_m)*grad(T_m))
         - 1./Ste*d(phi)
         )*fenics.dx
@@ -387,8 +387,7 @@ def run(output_dir = "output/wang2010_natural_convection_air",
             + Dd(f=lambda T: T, df=lambda T: 1.) 
             - 1./Ste*Dd(phi, dphi)
             + 1./(k_L*Pr)*dot(grad(psi_T), dT*dk(T_m)*grad(T_m) + k(T_m)*grad(dT))
-            - 1./cp_L*(dot(du,grad(psi_T))*T_m*cp(T_m) 
-                - dot(u_m,grad(psi_T))*(dT*T_m*dcp(T_m) + dT*cp(T_m)))
+            - 1./cp_L*dot(grad(psi_T), dT*dcp(T_m)*T_m*u_m + cp(T_m)*(dT*u_m + T_m*du))
             )*fenics.dx
 
         
