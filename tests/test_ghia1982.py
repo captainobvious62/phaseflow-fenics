@@ -54,7 +54,7 @@ def ghia1982_steady_lid_driven_cavity():
                 'location_expression': bottom_left_corner, 'method': 'pointwise'},
             {'subspace': 2, 'value_expression': "1.", 'degree': 2,
                 'location_expression': bottom_left_corner, 'method': 'pointwise'}],
-        nlp_relative_tolerance = 1.e-4)
+        nlp_relative_tolerance = 1.e-7)
 
     verify_against_ghia1982(w, mesh)
 
