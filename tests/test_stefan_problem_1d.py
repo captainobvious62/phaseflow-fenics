@@ -14,7 +14,7 @@ melting_data = [
 """Solidification datat from MATLAB script solving Worster2000"""
 solidification_data = [{'Ste': 0.125, 'time': 1., 'true_pci_pos': 0.49}] 
 
-def verify_pci_position(true_pci_position, r, w):
+def verify_pci_position(true_pci_position, tolerance, w):
     
     def theta(x):
         
@@ -24,7 +24,7 @@ def verify_pci_position(true_pci_position, r, w):
     
     pci_pos = opt.newton(theta, 0.1)
     
-    assert(abs(pci_pos - true_pci_position) < r)
+    assert(abs(pci_pos - true_pci_position) < tolerance)
     
 
 def refine_near_left_boundary(mesh, cycles):
@@ -66,7 +66,8 @@ def stefan_problem(Ste = 1.,
         dt = 0.001,
         end_time = 0.01,
         initial_uniform_cell_count = 1,
-        hot_boundary_refinement_cycles = 10):
+        hot_boundary_refinement_cycles = 10,
+        adaptive = True):
     
     mesh = fenics.UnitIntervalMesh(initial_uniform_cell_count)
     
@@ -81,15 +82,15 @@ def stefan_problem(Ste = 1.,
         initial_values_expression = (
             "0.",
             "0.",
-            "("+str(theta_h)+" - "+str(theta_c)+")*near(x[0],  0.) + "+str(theta_c)),
+            "("+str(theta_h)+" - "+str(theta_c)+")*(x[0] < 0.01) + "+str(theta_c)),
         boundary_conditions = [
             {'subspace': 0, 'value_expression': [0.], 'degree': 3, 'location_expression': "near(x[0],  0.) | near(x[0],  1.)", 'method': "topological"},
             {'subspace': 2, 'value_expression': theta_h, 'degree': 2, 'location_expression': "near(x[0],  0.)", 'method': "topological"},
             {'subspace': 2, 'value_expression': theta_c, 'degree': 2, 'location_expression': "near(x[0],  1.)", 'method': "topological"}],
-        temperature_of_fusion = 0.01,
+        temperature_of_fusion = 0.,
         regularization_smoothing_factor = r,
         nlp_relative_tolerance = 1.e-8,
-        adaptive = True,
+        adaptive = adaptive,
         adaptive_solver_tolerance = 1.e-8,
         end_time = end_time,
         time_step_size = dt)
@@ -110,15 +111,13 @@ def test_stefan_problem_Ste1():
 
     
 def test_stefan_problem_Ste0p01__nightly():
-
-    Ste = 0.01
     
-    r = 0.1
-    
-    w = stefan_problem(Ste=Ste, r=r, dt=1.e-4, end_time = 0.1, initial_uniform_cell_count=100)
+    w = stefan_problem(Ste=0.01, r=0.0025, dt=1.e-4, end_time = 0.05,
+        adaptive = False,
+        initial_uniform_cell_count=10000)
     
     """ Verify against solution from Kai's MATLAB script. """
-    verify_pci_position(true_pci_position=0.04277, r=r, w=w)
+    verify_pci_position(true_pci_position=0.0428, tolerance=1.e-3,  w=w)
 
 
 def test_stefan_problem_solidify__nightly(Ste = 0.125,
